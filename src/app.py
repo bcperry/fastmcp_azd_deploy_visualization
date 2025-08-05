@@ -86,13 +86,28 @@ async def create_bar_chart(
     try:
         df = _parse_data(data)
         
-        # Handle different data structures
+        # Smart column detection - prioritize categorical for x-axis, numerical for y-axis
         if x_column and y_column and x_column in df.columns and y_column in df.columns:
             x_data = df[x_column]
             y_data = df[y_column]
         elif len(df.columns) >= 2:
-            x_data = df.iloc[:, 0]
-            y_data = df.iloc[:, 1]
+            # Auto-detect which column should be x (categorical) and y (numerical)
+            col1, col2 = df.columns[0], df.columns[1]
+            col1_is_categorical = df[col1].dtype == 'object' or not pd.api.types.is_numeric_dtype(df[col1])
+            col2_is_categorical = df[col2].dtype == 'object' or not pd.api.types.is_numeric_dtype(df[col2])
+            
+            if col1_is_categorical and not col2_is_categorical:
+                # First column is categorical, second is numerical
+                x_data = df[col1]
+                y_data = df[col2]
+            elif col2_is_categorical and not col1_is_categorical:
+                # Second column is categorical, first is numerical
+                x_data = df[col2]
+                y_data = df[col1]
+            else:
+                # Default to original order
+                x_data = df.iloc[:, 0]
+                y_data = df.iloc[:, 1]
         elif len(df.columns) == 1:
             y_data = df.iloc[:, 0]
             x_data = range(len(y_data))
@@ -105,17 +120,19 @@ async def create_bar_chart(
             ax.barh(x_data, y_data, color=color)
             ax.set_xlabel(y_label)
             ax.set_ylabel(x_label)
+            # Rotate y-axis labels if they're text for horizontal bars
+            if hasattr(x_data, 'dtype') and x_data.dtype == 'object':
+                ax.tick_params(axis='y', labelsize=9)
         else:
             ax.bar(x_data, y_data, color=color)
             ax.set_xlabel(x_label)
             ax.set_ylabel(y_label)
+            # Rotate x-axis labels if they're text and not horizontal
+            if hasattr(x_data, 'dtype') and x_data.dtype == 'object':
+                plt.xticks(rotation=45, ha='right')
         
         ax.set_title(title)
         ax.grid(True, alpha=0.3)
-        
-        # Rotate x-axis labels if they're text and not horizontal
-        if not horizontal and hasattr(x_data, 'dtype') and x_data.dtype == 'object':
-            plt.xticks(rotation=45, ha='right')
         
         plt.tight_layout()
         return _create_image_content()
@@ -155,13 +172,28 @@ async def create_line_chart(
     try:
         df = _parse_data(data)
         
-        # Handle different data structures
+        # Smart column detection - prioritize categorical for x-axis, numerical for y-axis
         if x_column and y_column and x_column in df.columns and y_column in df.columns:
             x_data = df[x_column]
             y_data = df[y_column]
         elif len(df.columns) >= 2:
-            x_data = df.iloc[:, 0]
-            y_data = df.iloc[:, 1]
+            # Auto-detect which column should be x (categorical) and y (numerical)
+            col1, col2 = df.columns[0], df.columns[1]
+            col1_is_categorical = df[col1].dtype == 'object' or not pd.api.types.is_numeric_dtype(df[col1])
+            col2_is_categorical = df[col2].dtype == 'object' or not pd.api.types.is_numeric_dtype(df[col2])
+            
+            if col1_is_categorical and not col2_is_categorical:
+                # First column is categorical, second is numerical
+                x_data = df[col1]
+                y_data = df[col2]
+            elif col2_is_categorical and not col1_is_categorical:
+                # Second column is categorical, first is numerical
+                x_data = df[col2]
+                y_data = df[col1]
+            else:
+                # Both are numerical or both are categorical - use original order
+                x_data = df.iloc[:, 0]
+                y_data = df.iloc[:, 1]
         elif len(df.columns) == 1:
             y_data = df.iloc[:, 0]
             x_data = range(len(y_data))
@@ -169,7 +201,18 @@ async def create_line_chart(
             raise ValueError("Insufficient data for line chart")
         
         fig, ax = plt.subplots()
-        ax.plot(x_data, y_data, color=color, linestyle=line_style, marker=marker, markersize=6)
+        
+        # Handle categorical x-axis data
+        if hasattr(x_data, 'dtype') and x_data.dtype == 'object':
+            # For categorical x-axis, create numeric positions and set labels
+            x_positions = range(len(x_data))
+            ax.plot(x_positions, y_data, color=color, linestyle=line_style, marker=marker, markersize=6)
+            ax.set_xticks(x_positions)
+            ax.set_xticklabels(x_data, rotation=45, ha='right')
+        else:
+            # For numerical x-axis, plot normally
+            ax.plot(x_data, y_data, color=color, linestyle=line_style, marker=marker, markersize=6)
+        
         ax.set_xlabel(x_label)
         ax.set_ylabel(y_label)
         ax.set_title(title)
@@ -211,6 +254,33 @@ async def create_histogram(
     try:
         df = _parse_data(data)
         
+        # Check if this is categorical data that should be a bar chart instead
+        if len(df.columns) >= 2:
+            # If we have multiple columns, check if one is categorical and one is numerical
+            # This suggests we want a bar chart showing categories vs values
+            if column and column in df.columns:
+                # Find the other column for categories
+                other_columns = [col for col in df.columns if col != column]
+                if other_columns:
+                    categories_col = other_columns[0]
+                    values_col = column
+                    
+                    # Check if the categories column contains text/categorical data
+                    if df[categories_col].dtype == 'object' or not pd.api.types.is_numeric_dtype(df[categories_col]):
+                        # This is categorical data - create a bar chart instead
+                        fig, ax = plt.subplots()
+                        ax.bar(df[categories_col], df[values_col], color=color, alpha=alpha)
+                        ax.set_xlabel(x_label)
+                        ax.set_ylabel(y_label)
+                        ax.set_title(title)
+                        ax.grid(True, alpha=0.3)
+                        
+                        # Rotate x-axis labels for better readability
+                        plt.xticks(rotation=45, ha='right')
+                        plt.tight_layout()
+                        return _create_image_content()
+        
+        # Original histogram logic for continuous numerical data
         # Select data to plot
         if column and column in df.columns:
             plot_data = df[column]
@@ -222,12 +292,26 @@ async def create_histogram(
         # Remove NaN values
         plot_data = plot_data.dropna()
         
-        fig, ax = plt.subplots()
-        ax.hist(plot_data, bins=bins, color=color, alpha=alpha, edgecolor='black', linewidth=0.5)
-        ax.set_xlabel(x_label)
-        ax.set_ylabel(y_label)
-        ax.set_title(title)
-        ax.grid(True, alpha=0.3)
+        # Check if data is actually categorical/discrete
+        if plot_data.dtype == 'object' or len(plot_data.unique()) <= 20:
+            # For discrete/categorical data, create a bar chart of value counts
+            value_counts = plot_data.value_counts().sort_index()
+            fig, ax = plt.subplots()
+            ax.bar(range(len(value_counts)), value_counts.values, color=color, alpha=alpha)
+            ax.set_xticks(range(len(value_counts)))
+            ax.set_xticklabels(value_counts.index, rotation=45, ha='right')
+            ax.set_xlabel(x_label)
+            ax.set_ylabel(y_label)
+            ax.set_title(title)
+            ax.grid(True, alpha=0.3)
+        else:
+            # True histogram for continuous data
+            fig, ax = plt.subplots()
+            ax.hist(plot_data, bins=bins, color=color, alpha=alpha, edgecolor='black', linewidth=0.5)
+            ax.set_xlabel(x_label)
+            ax.set_ylabel(y_label)
+            ax.set_title(title)
+            ax.grid(True, alpha=0.3)
         
         plt.tight_layout()
         return _create_image_content()
@@ -263,13 +347,28 @@ async def create_pie_chart(
     try:
         df = _parse_data(data)
         
-        # Handle different data structures
+        # Smart column detection - prioritize categorical for labels, numerical for values
         if labels_column and values_column and labels_column in df.columns and values_column in df.columns:
             labels = df[labels_column]
             values = df[values_column]
         elif len(df.columns) >= 2:
-            labels = df.iloc[:, 0]
-            values = df.iloc[:, 1]
+            # Auto-detect which column should be labels (categorical) and values (numerical)
+            col1, col2 = df.columns[0], df.columns[1]
+            col1_is_categorical = df[col1].dtype == 'object' or not pd.api.types.is_numeric_dtype(df[col1])
+            col2_is_categorical = df[col2].dtype == 'object' or not pd.api.types.is_numeric_dtype(df[col2])
+            
+            if col1_is_categorical and not col2_is_categorical:
+                # First column is categorical (labels), second is numerical (values)
+                labels = df[col1]
+                values = df[col2]
+            elif col2_is_categorical and not col1_is_categorical:
+                # Second column is categorical (labels), first is numerical (values)
+                labels = df[col2]
+                values = df[col1]
+            else:
+                # Default to original order
+                labels = df.iloc[:, 0]
+                values = df.iloc[:, 1]
         elif len(df.columns) == 1 and df.index.name:
             labels = df.index
             values = df.iloc[:, 0]
@@ -284,7 +383,10 @@ async def create_pie_chart(
             labels = labels[mask]
         else:
             # For list-like labels, filter based on mask
-            labels = [labels[i] for i in range(len(labels)) if mask.iloc[i]]
+            if hasattr(mask, 'iloc'):
+                labels = [labels[i] for i in range(len(labels)) if mask.iloc[i]]
+            else:
+                labels = [labels[i] for i in range(len(labels)) if mask[i]]
         values = values[mask]
         
         if len(values) == 0:
