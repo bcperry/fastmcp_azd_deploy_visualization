@@ -2,6 +2,7 @@ import pytest
 import json
 import base64
 from fastmcp import FastMCP, Client
+from mcp.types import ImageContent
 from src.app import mcp
 import pandas as pd
 import io
@@ -37,11 +38,27 @@ def sample_data():
 
 def decode_base64_image(base64_string: str) -> Image.Image:
     """Helper function to decode base64 image string"""
+    # Remove data URL prefix if present
     if base64_string.startswith("data:image/png;base64,"):
         base64_string = base64_string.split(",")[1]
     
     image_data = base64.b64decode(base64_string)
     return Image.open(io.BytesIO(image_data))
+
+
+def validate_image_content(result) -> Image.Image:
+    """Helper function to validate ImageContent result and return PIL Image"""
+    # The result should be an ImageContent object
+    result = result[0]
+    assert isinstance(result, ImageContent)
+    assert result.type == "image"
+    assert result.mimeType == "image/png"
+    assert result.data is not None
+    
+    # Decode and validate the image
+    img = decode_base64_image(result.data)
+    assert img.format == "PNG"
+    return img
 
 
 class TestBarChart:
@@ -54,10 +71,7 @@ class TestBarChart:
                 "x_label": "Categories",
                 "y_label": "Values"
             })
-            assert result[0].text.startswith("data:image/png;base64,")
-            # Verify the image can be decoded
-            img = decode_base64_image(result[0].text)
-            assert img.format == "PNG"
+            validate_image_content(result)
 
     async def test_bar_chart_with_json_string(self, mcp_server, sample_data):
         """Test bar chart creation with JSON string data"""
@@ -68,9 +82,7 @@ class TestBarChart:
                 "horizontal": False
             })
             
-            assert result[0].text.startswith("data:image/png;base64,")
-            img = decode_base64_image(result[0].text)
-            assert img.format == "PNG"
+            validate_image_content(result)
 
     async def test_bar_chart_horizontal(self, mcp_server, sample_data):
         """Test horizontal bar chart creation"""
@@ -83,9 +95,7 @@ class TestBarChart:
                 "color": "green"
             })
             
-            assert result[0].text.startswith("data:image/png;base64,")
-            img = decode_base64_image(result[0].text)
-            assert img.format == "PNG"
+            validate_image_content(result)
 
     async def test_bar_chart_with_csv_string(self, mcp_server, sample_data):
         """Test bar chart creation with CSV string data"""
@@ -96,9 +106,7 @@ class TestBarChart:
                 "y_column": "value"
             })
             
-            assert result[0].text.startswith("data:image/png;base64,")
-            img = decode_base64_image(result[0].text)
-            assert img.format == "PNG"
+            validate_image_content(result)
 
 
 class TestLineChart:
@@ -113,9 +121,7 @@ class TestLineChart:
                 "marker": "o"
             })
             
-            assert result[0].text.startswith("data:image/png;base64,")
-            img = decode_base64_image(result[0].text)
-            assert img.format == "PNG"
+            validate_image_content(result)
 
     async def test_line_chart_with_list_of_dicts(self, mcp_server, sample_data):
         """Test line chart creation with list of dictionaries"""
@@ -129,9 +135,7 @@ class TestLineChart:
                 "marker": "s"
             })
             
-            assert result[0].text.startswith("data:image/png;base64,")
-            img = decode_base64_image(result[0].text)
-            assert img.format == "PNG"
+            validate_image_content(result)
 
     async def test_line_chart_styling_options(self, mcp_server, sample_data):
         """Test line chart with different styling options"""
@@ -146,9 +150,7 @@ class TestLineChart:
                 "marker": "^"
             })
             
-            assert result[0].text.startswith("data:image/png;base64,")
-            img = decode_base64_image(result[0].text)
-            assert img.format == "PNG"
+            validate_image_content(result)
 
 
 class TestHistogram:
@@ -163,9 +165,7 @@ class TestHistogram:
                 "alpha": 0.7
             })
             
-            assert result[0].text.startswith("data:image/png;base64,")
-            img = decode_base64_image(result[0].text)
-            assert img.format == "PNG"
+            validate_image_content(result)
 
     async def test_histogram_with_dataframe_column(self, mcp_server, sample_data):
         """Test histogram creation specifying a column"""
@@ -178,9 +178,7 @@ class TestHistogram:
                 "alpha": 0.8
             })
             
-            assert result[0].text.startswith("data:image/png;base64,")
-            img = decode_base64_image(result[0].text)
-            assert img.format == "PNG"
+            validate_image_content(result)
 
     async def test_histogram_custom_bins(self, mcp_server, sample_data):
         """Test histogram with custom number of bins"""
@@ -193,9 +191,7 @@ class TestHistogram:
                 "y_label": "Count"
             })
             
-            assert result[0].text.startswith("data:image/png;base64,")
-            img = decode_base64_image(result[0].text)
-            assert img.format == "PNG"
+            validate_image_content(result)
 
 
 class TestPieChart:
@@ -209,9 +205,7 @@ class TestPieChart:
                 "startangle": 90
             })
             
-            assert result[0].text.startswith("data:image/png;base64,")
-            img = decode_base64_image(result[0].text)
-            assert img.format == "PNG"
+            validate_image_content(result)
 
     async def test_pie_chart_with_list_of_dicts(self, mcp_server, sample_data):
         """Test pie chart creation with list of dictionaries"""
@@ -224,9 +218,7 @@ class TestPieChart:
                 "autopct": "%1.2f%%"
             })
             
-            assert result[0].text.startswith("data:image/png;base64,")
-            img = decode_base64_image(result[0].text)
-            assert img.format == "PNG"
+            validate_image_content(result)
 
     async def test_pie_chart_with_colors(self, mcp_server, sample_data):
         """Test pie chart with custom colors"""
@@ -239,9 +231,7 @@ class TestPieChart:
                 "startangle": 45
             })
             
-            assert result[0].text.startswith("data:image/png;base64,")
-            img = decode_base64_image(result[0].text)
-            assert img.format == "PNG"
+            validate_image_content(result)
 
 
 class TestErrorHandling:
@@ -281,9 +271,7 @@ class TestErrorHandling:
             })
             
             # Should succeed by filtering out negative values
-            assert result[0].text.startswith("data:image/png;base64,")
-            img = decode_base64_image(result[0].text)
-            assert img.format == "PNG"
+            validate_image_content(result)
 
 
 class TestDataParsing:
@@ -297,9 +285,7 @@ class TestDataParsing:
                 "y_column": "y"
             })
             
-            assert result[0].text.startswith("data:image/png;base64,")
-            img = decode_base64_image(result[0].text)
-            assert img.format == "PNG"
+            validate_image_content(result)
 
     async def test_csv_string_parsing(self, mcp_server):
         """Test parsing of CSV string data"""
@@ -312,9 +298,7 @@ class TestDataParsing:
                 "title": "Monthly Sales"
             })
             
-            assert result[0].text.startswith("data:image/png;base64,")
-            img = decode_base64_image(result[0].text)
-            assert img.format == "PNG"
+            validate_image_content(result)
 
     async def test_list_data_parsing(self, mcp_server):
         """Test parsing of list data"""
@@ -326,9 +310,7 @@ class TestDataParsing:
                 "title": "List Data Histogram"
             })
             
-            assert result[0].text.startswith("data:image/png;base64,")
-            img = decode_base64_image(result[0].text)
-            assert img.format == "PNG"
+            validate_image_content(result)
 
 
 class TestChartCustomization:
@@ -342,9 +324,7 @@ class TestChartCustomization:
                 "y_label": "Custom Y Label"
             })
             
-            assert result[0].text.startswith("data:image/png;base64,")
-            img = decode_base64_image(result[0].text)
-            assert img.format == "PNG"
+            validate_image_content(result)
 
     async def test_color_customization(self, mcp_server, sample_data):
         """Test color customization across different chart types"""
@@ -358,9 +338,7 @@ class TestChartCustomization:
                     "title": f"Chart with {color} color"
                 })
                 
-                assert result[0].text.startswith("data:image/png;base64,")
-                img = decode_base64_image(result[0].text)
-                assert img.format == "PNG"
+                validate_image_content(result)
 
 
 if __name__ == "__main__":
